@@ -2,10 +2,9 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from .builder import LOSSES, build_loss
+from registry import MODELS
 
-
-@LOSSES.register_module()
+@MODELS.register_module()
 class RAFTLoss(nn.Module):
     def __init__(self, loss_weight=1.0, max_flow=400, eps=1e-10):
         super().__init__()
@@ -25,7 +24,7 @@ class RAFTLoss(nn.Module):
 
 
 
-@LOSSES.register_module()
+@MODELS.register_module()
 class L1Loss(nn.Module):
     def __init__(self, loss_weight=1.0, eps=1e-10):
         super().__init__()
@@ -38,7 +37,7 @@ class L1Loss(nn.Module):
 
 
 
-@LOSSES.register_module()
+@MODELS.register_module()
 class SequenceLoss(nn.Module):
     """Sequence Loss for RAFT.
     Args:
@@ -51,7 +50,7 @@ class SequenceLoss(nn.Module):
 
     def __init__(self, loss_func_cfg:dict, gamma: float = 0.8, ) -> None:
         super().__init__()
-        self.loss_func = build_loss(loss_func_cfg)
+        self.loss_func = MODELS.build(loss_func_cfg)
         self.gamma = gamma
     
     def to(self, device):

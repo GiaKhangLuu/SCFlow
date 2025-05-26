@@ -16,6 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-dir', default='data/ycbv/models/models', type=str)
     parser.add_argument('--save-dir', default='data/ycbv/bbox.json', type=str)
+    parser.add_argument('--ext', default='ply', type=str)
     parser.add_argument('--type', choices=['bbox_oriented', 'bbox', 'FPS'], default='bbox')
     parser.add_argument('--keypoint-num', default=8, type=int, help='specific the keypoint num when using FPS')
     parser.add_argument('--category-specific', action='store_true')
@@ -27,7 +28,7 @@ def parse_args():
 
 if __name__ == '__main__':
     args = parse_args()
-    models = glob(osp.join(args.model_dir, '*.ply'))
+    models = glob(osp.join(args.model_dir, f'*.{args.ext}'))
     models = sorted(models)
     keypoints_collect = []
     for model in models:

@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule
-from mmcv.runner import BaseModule
+from mmengine.model import BaseModule
 
 from models.utils.corr_lookup import CorrLookup
 
-from .builder import DECODERS
+from registry import MODELS
 
 
 
@@ -296,7 +296,7 @@ class XHead(BaseModule):
 
 
 
-@DECODERS.register_module()
+@MODELS.register_module()
 class RAFTDecoder(BaseModule):
     """The decoder of RAFT Net.
 

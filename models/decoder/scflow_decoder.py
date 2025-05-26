@@ -4,18 +4,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule
-from mmcv.runner import BaseModule
+from mmengine.model import BaseModule
 
-from .builder import DECODERS
+from registry import MODELS
 from ..utils import get_flow_from_delta_pose_and_points, get_pose_from_delta_pose, CorrLookup, cal_3d_2d_corr
 from .raft_decoder import MotionEncoder, XHead, ConvGRU, CorrelationPyramid
-from ..head import build_head
+#from ..head import build_head
+from registry import MODELS
 
 
 
 
 
-@DECODERS.register_module()
+@MODELS.register_module()
 class SCFlowDecoder(BaseModule):
     """The decoder of RAFT Net.
 
@@ -55,7 +56,7 @@ class SCFlowDecoder(BaseModule):
         detach_pose: bool,
         mask_flow: bool,
         mask_corr: bool,
-        pose_head_cfg: dict(),
+        pose_head_cfg: dict,
         depth_transform: str='exp',
         detach_depth_for_xy: bool=False,
         corr_lookup_cfg: dict = dict(align_corners=True),
@@ -96,7 +97,7 @@ class SCFlowDecoder(BaseModule):
             act_cfg=act_cfg)
         self.gru_type = gru_type
         self.gru = self.make_gru_block()
-        self.pose_pred = build_head(pose_head_cfg)
+        self.pose_pred = MODELS.build(pose_head_cfg)
         self.flow_pred = XHead(self.h_channels, feat_channels, 2, x='flow')
         self.mask_pred = XHead(self.h_channels, feat_channels, 1, x='mask')
         self.delta_flow_encoder = nn.Sequential(*self.make_delta_flow_encoder(

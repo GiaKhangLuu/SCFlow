@@ -1,6 +1,6 @@
-from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
 
-REFINERS = Registry('refiner')
+MODELS = Registry('MODELS')
 
 def build_refiner(cfg):
-    return build_from_cfg(cfg, REFINERS)
+    return build_from_cfg(cfg, MODELS)

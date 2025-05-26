@@ -1,16 +1,12 @@
 import itertools
 import mmcv
+import mmengine
 import numpy as np
 from os import path as osp
 from typing import Sequence, Optional
-from .builder import DATASETS
+from registry import DATASETS
 from .base_dataset import BaseDataset
 from terminaltables import AsciiTable
-
-
-
-
-
 
 @DATASETS.register_module()
 class SuperviseTrainDataset(BaseDataset):
@@ -94,9 +90,9 @@ class SuperviseTrainDataset(BaseDataset):
             gt_pose_json_path = osp.join(self.gt_annots_root, self.pose_json_tmpl.format(int(sequence)))
             gt_info_json_path = osp.join(self.gt_annots_root, self.info_json_tmpl.format(int(sequence)))
             camera_json_path = self.camera_json_tmpl.format(int(sequence))
-            gt_pose_annots = mmcv.load(gt_pose_json_path)
-            gt_infos = mmcv.load(gt_info_json_path)
-            camera_annots = mmcv.load(camera_json_path)
+            gt_pose_annots = mmengine.load(gt_pose_json_path)
+            gt_infos = mmengine.load(gt_info_json_path)
+            camera_annots = mmengine.load(camera_json_path)
             gt_seq_pose_annots[sequence] = dict(pose=gt_pose_annots, camera=camera_annots, gt_info=gt_infos)
         return gt_seq_pose_annots
     

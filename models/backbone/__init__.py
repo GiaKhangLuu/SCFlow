@@ -1,4 +1,4 @@
 from .resnet import ResNet, ResNetV1d
 from .densenet import DenseLayer, BasicDenseBlock
-from .builder import build_backbone, BACKBONES
 
+__all__ = ["ResNet", "ResNetV1d", "DenseLayer", "BasicDenseBlock"]

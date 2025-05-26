@@ -11,6 +11,7 @@ from pytorch3d.renderer import (
     HardFlatShader)
 from pytorch3d.renderer.mesh.renderer import MeshRendererWithFragments
 from pytorch3d.io.ply_io import MeshPlyFormat
+from pytorch3d.io.obj_io import MeshObjFormat
 from torchvision.utils import save_image
 
 def cameras_from_opencv_projection(
@@ -60,10 +61,10 @@ def cameras_from_opencv_projection(
 
 
 
-def load_mesh(f, path_manager=None):
+def load_mesh(f, mesh_init, path_manager=None):
     if path_manager is None:
         path_manager = PathManager()
-    mesh = MeshPlyFormat().read(f, include_textures=True, device='cpu', path_manager=path_manager)
+    mesh = mesh_init().read(f, include_textures=True, device='cpu', path_manager=path_manager)
     return mesh
 
 
@@ -74,26 +75,32 @@ shader_mapping = {
 }
 
 class Renderer(nn.Module):
-    def __init__(self,
-                mesh_dir,
-                image_size, # (H, W)
-                shader_type='Phong',
-                soft_blending=True,
-                render_mask=True,
-                render_image=True,
-                faces_per_pixel=1,
-                blur_radius=0.,
-                sigma=1e-4,
-                gamma=1e-4,
-                bin_size=None,
-                default_lights=True,
-                seperate_lights=False,
-                background_color=(0.5, 0.5, 0.5),
-                ):
+    def __init__(
+            self,
+            mesh_dir,
+            image_size, # (H, W)
+            shader_type='Phong',
+            soft_blending=True,
+            render_mask=True,
+            render_image=True,
+            faces_per_pixel=1,
+            blur_radius=0.,
+            sigma=1e-4,
+            gamma=1e-4,
+            bin_size=None,
+            default_lights=True,
+            seperate_lights=False,
+            background_color=(0.5, 0.5, 0.5),
+            obj_label_in_file=True,
+            label_obj_id_map=None,
+            mesh_ext='ply'
+        ):
         super(Renderer, self).__init__()
        
         assert shader_type in shader_mapping.keys()
-        
+
+        self.mesh_ext = mesh_ext 
+        self.mesh_init = MeshPlyFormat if self.mesh_ext == 'ply' else MeshObjFormat
         self.image_size = image_size
         self.render_mask = render_mask
         self.render_image = render_image
@@ -105,10 +112,13 @@ class Renderer(nn.Module):
         self.sigma = sigma
         self.background_color = background_color
         self.shader = shader_mapping[self.shader_type][self.blending]
+        self.obj_label_in_file = obj_label_in_file 
+        self.label_obj_id_map = label_obj_id_map 
         self.load_meshes(mesh_dir)
         self.default_lights = default_lights
         self.seperate_lights = seperate_lights
         self.bin_size = bin_size
+
 
     def to(self, device):
         self._init_renderer(device)
@@ -119,16 +129,22 @@ class Renderer(nn.Module):
         for k in self.meshes:
             self.meshes[k] = self.meshes[k].to(device)
     
-    def load_meshes(self, mesh_dir, ext='.ply'):
+    def load_meshes(self, mesh_dir):
+        if not self.obj_label_in_file:
+            assert self.label_obj_id_map is not None
         if osp.isdir(mesh_dir):
-            mesh_paths = glob(osp.join(mesh_dir, '*'+ext))
+            mesh_paths = glob(osp.join(mesh_dir, '*.'+self.mesh_ext))
         else:
             mesh_paths = [mesh_dir]
         mesh_paths = sorted(mesh_paths)
         self.meshes = dict()
         for mesh_path in mesh_paths:
-            obj_label = int(osp.basename(mesh_path).split('.')[0].split('_')[-1])-1
-            self.meshes[obj_label] = load_mesh(mesh_path)
+            if self.obj_label_in_file:
+                obj_label = int(osp.basename(mesh_path).split('.')[0].split('_')[-1])-1
+            else:
+                obj_name = osp.basename(mesh_path).split('.')[0]
+                obj_label = self.label_obj_id_map[obj_name]
+            self.meshes[obj_label] = load_mesh(mesh_path, self.mesh_init)
             
     def _init_renderer(self, device):
         self.raster_settings = RasterizationSettings(

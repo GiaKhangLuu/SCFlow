@@ -1,14 +1,15 @@
-from mmcv.parallel import DataContainer
-from mmcv.utils import build_from_cfg
+from mmengine.structures import BaseDataElement 
+import torch
 import numpy as np
-from .builder import PIPELINES, build_pipeline
+#from .builder import build_pipeline
+from registry import TRANSFORMS
 from ..utils import to_tensor
 from ..pose import project_3d_point, load_mesh
 from ..mask import BitmapMasks
+from .data_container import DataContainer
 
 
-
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class ProjectKeypoints:
     '''
     Project 3D points to 2D image plane, add 'keypoints_2d' key and 'keypoints_3d_camera_frame' key
@@ -37,7 +38,7 @@ class ProjectKeypoints:
         results['gt_keypoints_2d'] = keypoints_2d
         return results
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class ComputeBbox:
     '''
     Compute the bbox for the jittered pose, aka reference pose, add 'ref_bboxes' key
@@ -49,7 +50,7 @@ class ComputeBbox:
                 pose_field=['ref_rotations', 'ref_translations'], 
                 bbox_field='ref_bboxes'):
         self.mesh_dir = mesh_dir
-        self.meshes = load_mesh(mesh_dir)
+        self.meshes = load_mesh(mesh_dir, ext='.obj')
         mesh_vertices = [mesh.vertices.view(np.ndarray).astype(np.float32) for mesh in self.meshes]
         self.mesh_vertices = [vertices[np.random.choice(vertices.shape[0], 1000)] for vertices in mesh_vertices]
         self.clip_border = clip_border
@@ -91,7 +92,7 @@ class ComputeBbox:
 
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class ToTensor:
     def __init__(self, stack_keys=['img']):
         self.stack_keys = stack_keys
@@ -147,7 +148,7 @@ class ToTensor:
                     results[field] = DataContainer(results[field], cpu_only=True)
         return results
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Collect:
     def __init__(self, 
                 keys=('img',), 
@@ -180,7 +181,7 @@ class Collect:
         return data
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Compose:
     """Compose multiple transforms sequentially.
 
@@ -193,7 +194,7 @@ class Compose:
         self.transforms = []
         for transform in transforms:
             if isinstance(transform, dict):
-                transform = build_pipeline(transform)
+                transform = TRANSFORMS.build(transform)
                 self.transforms.append(transform)
             elif callable(transform):
                 self.transforms.append(transform)

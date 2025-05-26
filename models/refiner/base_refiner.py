@@ -3,19 +3,20 @@ from torch import nn
 from torch.nn import functional as F
 from typing import Optional, Dict, Sequence
 import mmcv
-from mmcv.runner import BaseModule
+from mmengine.model import BaseModel, BaseModule
 import cv2, random, math, time
 import numpy as np
 from pathlib import Path
 from kornia.augmentation import AugmentationSequential
-from .builder import REFINERS
-from ..encoder import build_encoder
-from ..decoder import build_decoder
+from registry import MODELS
+#from ..encoder import build_encoder
+#from ..decoder import build_decoder
 from ..utils import Renderer, get_flow_from_delta_pose_and_depth, filter_flow_by_mask, cal_epe
 from ..utils.utils import simple_forward_warp, tensor_image_to_cv2, Warp
+from datasets import DataContainer
 
-@REFINERS.register_module()
-class BaseRefiner(BaseModule):
+@MODELS.register_module()
+class BaseRefiner(BaseModel):
     def __init__(self, 
                 encoder: Optional[Dict]=None,
                 decoder: Optional[Dict]=None,
@@ -27,18 +28,18 @@ class BaseRefiner(BaseModule):
                 init_cfg: dict={},
                 max_flow: int=400,
                 ):
-        super().__init__(init_cfg)
+        super().__init__(init_cfg=init_cfg)
         self.seperate_encoder = seperate_encoder
         if encoder is not None:
             if self.seperate_encoder:
-                self.render_encoder = build_encoder(encoder)
-                self.real_encoder = build_encoder(encoder)
+                self.render_encoder = MODELS.build(encoder)
+                self.real_encoder = MODELS.build(encoder)
             else:
-                encoder_model = build_encoder(encoder)
+                encoder_model = MODELS.build(encoder)
                 self.render_encoder = encoder_model
                 self.real_encoder = encoder_model
         if decoder is not None:
-            self.decoder = build_decoder(decoder)  
+            self.decoder = MODELS.build(decoder)  
         if renderer is not None: 
             self.renderer = Renderer(**renderer)    
         else:
@@ -66,9 +67,9 @@ class BaseRefiner(BaseModule):
 
 
     def to(self, device):
-        super().to(device)
         if self.renderer is not None:
             self.renderer.to(device)
+        return super().to(device)
         
     def loss(self, data_batch):
         raise NotImplementedError
@@ -82,13 +83,25 @@ class BaseRefiner(BaseModule):
         labels, internel_k = annots['labels'], annots['k']
         ori_k, transform_matrixs = annots['ori_k'], annots['transform_matrix']
 
+        real_images = [img.data for img in real_images]
+        ref_rotations = [ref_rot.data for ref_rot in ref_rotations]
+        ref_translations = [ref_trans.data for ref_trans in ref_translations]
+        labels = [l.data for l in labels]
+        internel_k = [k.data for k in internel_k]
+        transform_matrixs = [mat.data for mat in transform_matrixs]
+        ori_k = [k.data for k in ori_k]
+        meta_infos = [meta_inf.data for meta_inf in meta_infos]
+
         per_img_patch_num = [len(images) for images in real_images]
-        real_images = torch.cat(real_images)
-        ref_rotations, ref_translations = torch.cat(ref_rotations, dim=0), torch.cat(ref_translations, dim=0)
-        labels = torch.cat(labels)
-        internel_k = torch.cat(internel_k)
-        transform_matrixs = torch.cat(transform_matrixs)
-        ori_k = torch.cat([k[None].expand(patch_num, 3, 3) for k, patch_num in zip(ori_k, per_img_patch_num)])
+        real_images = torch.cat(real_images).to(torch.device('cuda'))
+        ref_rotations = torch.cat(ref_rotations, dim=0).to(torch.device('cuda'))
+        ref_translations = torch.cat(ref_translations, dim=0).to(torch.device('cuda'))
+
+        labels = torch.cat(labels).to(torch.device('cuda'))
+        internel_k = torch.cat(internel_k).to(torch.device('cuda'))
+
+        transform_matrixs = torch.cat(transform_matrixs).to(torch.device('cuda'))
+        ori_k = torch.cat([k[None].expand(patch_num, 3, 3) for k, patch_num in zip(ori_k, per_img_patch_num)]).to(torch.device('cuda'))
         
         render_outputs = self.renderer(ref_rotations, ref_translations, internel_k, labels)
         rendered_images, rendered_fragments = render_outputs['images'], render_outputs['fragments']
@@ -121,7 +134,12 @@ class BaseRefiner(BaseModule):
             output.update(real_depths=real_depths)
         if 'gt_rotations' in annots:
             gt_rotations, gt_translaions = annots['gt_rotations'], annots['gt_translations']
+
+            gt_rotations = [rot.data for rot in gt_rotations]
+            gt_translaions = [trans.data for trans in gt_translaions]
+
             gt_rotations, gt_translaions = torch.cat(gt_rotations, dim=0), torch.cat(gt_translaions, dim=0)
+
             output.update(
                 gt_rotations=gt_rotations,
                 gt_translations=gt_translaions,
@@ -139,16 +157,31 @@ class BaseRefiner(BaseModule):
         ref_rotations, ref_translations = annots['ref_rotations'], annots['ref_translations']
         init_add_error, init_rot_error, init_trans_error = annots['init_add_error'], annots['init_rot_error'], annots['init_trans_error']
         labels, internel_k = annots['labels'], annots['k']
+
+        init_rot_error = torch.tensor([error[0] for error in init_rot_error])
+        init_add_error = torch.tensor([error[0] for error in init_add_error])
+        init_trans_error = torch.tensor([error[0] for error in init_trans_error])
+
         init_rot_error_std, init_rot_error_mean = torch.std_mean(init_rot_error, unbiased=False)
         init_add_error_std, init_add_error_mean = torch.std_mean(init_add_error, unbiased=False)
         init_trans_error_std, init_trans_error_mean = torch.std_mean(init_trans_error, unbiased=False)
 
+        real_images = [img.data for img in real_images]
+        ref_rotations = [ref_rot.data for ref_rot in ref_rotations]
+        ref_translations = [ref_trans.data for ref_trans in ref_translations]
+        gt_rotations = [gt_rot.data for gt_rot in gt_rotations]
+        gt_translations = [gt_trans.data for gt_trans in gt_translations]
+        labels = [l.data for l in labels]
+        internel_k = [k.data for k in internel_k]
+        meta_infos = [meta_inf.data for meta_inf in meta_infos]
+
         # real_images: [(sample_num, 3, H, W)]
-        real_images = torch.cat(real_images) # (B*sample_num, 3, H, W)
+        real_images = torch.cat(real_images).to(torch.device('cuda')) # (B*sample_num, 3, H, W)
+
         # ref_rotation: [(sample_num, 3, 3)], ref_translation: [(sample_num, 3)]
-        ref_rotations, ref_translations = torch.cat(ref_rotations, axis=0), torch.cat(ref_translations, axis=0)
-        gt_rotations, gt_translations = torch.cat(gt_rotations, axis=0), torch.cat(gt_translations, axis=0)
-        labels, internel_k = torch.cat(labels), torch.cat(internel_k)
+        ref_rotations, ref_translations = torch.cat(ref_rotations, axis=0).to(torch.device('cuda')), torch.cat(ref_translations, axis=0).to(torch.device('cuda'))
+        gt_rotations, gt_translations = torch.cat(gt_rotations, axis=0).to(torch.device('cuda')), torch.cat(gt_translations, axis=0).to(torch.device('cuda'))
+        labels, internel_k = torch.cat(labels).to(torch.device('cuda')), torch.cat(internel_k).to(torch.device('cuda'))
 
         render_outputs = self.renderer(ref_rotations, ref_translations, internel_k, labels)
         rendered_images, rendered_fragments = render_outputs['images'], render_outputs['fragments']
@@ -183,7 +216,8 @@ class BaseRefiner(BaseModule):
             init_trans_error_std = init_trans_error_std,
         )
         if 'gt_masks' in annots:
-            gt_masks = [mask.to_tensor(dtype=torch.bool, device=gt_rotations[0].device) for mask in annots['gt_masks']]
+            gt_masks = [mask.data for mask in annots['gt_masks']]
+            gt_masks = [mask.to_tensor(dtype=torch.bool, device=gt_rotations[0].device) for mask in gt_masks]
             gt_masks = torch.cat(gt_masks, axis=0)
             output['gt_masks'] = gt_masks
             return output
@@ -322,19 +356,55 @@ class BaseRefiner(BaseModule):
                 raise RuntimeError
         return log_imgs
     
-    def train_step(self, data_batch, optimizer, **kwargs):
+    def train_step(self, data_batch, optim_wrapper, **kwargs):
         if self.train_cycle_num > 1:
-            loss, log_imgs, log_vars = self.train_multiple_iterations(data_batch, optimizer)
+            loss, log_imgs, log_vars = self.train_multiple_iterations(data_batch, optim_wrapper)
         else:
             loss, log_imgs, log_vars, _, _ = self.loss(data_batch)
         outputs = dict(
             loss = loss,
-            log_vars = log_vars,
-            log_imgs = log_imgs,
-            num_samples = len(data_batch['img_metas']),
+            **log_vars,
+            #log_imgs = log_imgs,
+            #num_samples = len(data_batch['img_metas']),
         )
         return outputs
+
+    def format_result(self, batch_preds):
+
+        results_batch = []
+        # choose a key
+        random_key = random.choice(list(batch_preds.keys()))
+
+        batch_size = len(batch_preds[random_key])
+        for i in range(batch_size):
+            result_dict = {}
+            for key in batch_preds.keys():
+                result_dict[key] = batch_preds[key][i].cpu().numpy()
+            results_batch.append(result_dict)
+        return results_batch
+
+    def val_step(self, data_batch):
+        with torch.no_grad():
+            # call forward function
+            batch_preds = self.forward(data_batch, return_loss=False)
+
+        result = self.format_result(batch_preds)
+        batch_size = len(result)        
+        result_new_list = []
+        img_metas = [meta.data for meta in data_batch['img_metas']]
+        annots = [data_batch['annots']]
+
+        for i in range(batch_size):
+            result_new = dict(pred=result[i], gt={})
+            result_new['img_metas'] = img_metas[i]
+            result_new_list.append(result_new)
+        result = result_new_list
+
+        return result
     
+    def test_step(self, data_batch):
+        return self.val_step(data_batch)
+
     def forward(self, data_batch, return_loss=False):
         data = self.format_data_test(data_batch)
         if self.test_cycle_num > 1:

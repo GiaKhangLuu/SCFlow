@@ -1,4 +1,4 @@
-from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
 from torch.utils.data import ConcatDataset
 
 DATASETS = Registry('dataset')

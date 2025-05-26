@@ -1,6 +1,6 @@
-from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
 
-HEAD = Registry('head')
+MODELS = Registry('MODELS')
 
 def build_head(cfg):
-    return build_from_cfg(cfg, HEAD)
+    return build_from_cfg(cfg, MODELS)

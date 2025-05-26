@@ -1,9 +1,10 @@
 import mmcv
+import mmengine
 import cv2
 import random
 import argparse
 import numpy as np
-from mmcv.utils import Config
+from mmengine import Config
 from datasets import build_dataset
 from pathlib import Path
 from tools.visualize import imshow_projected_points, imshow_pose_axis, imshow_pose_contour
@@ -63,7 +64,7 @@ def retrieve_data_cfg(config_path, skip_type, dataset_type):
     cfg = Config.fromfile(config_path)
     # import modules from string list.
     if cfg.get('custom_imports', None):
-        from mmcv.utils import import_modules_from_strings
+        from mmengine.utils import import_modules_from_strings
         import_modules_from_strings(**cfg['custom_imports'])
     data_cfg = cfg.data.get(dataset_type)
    
@@ -151,9 +152,9 @@ def main():
     
     dataset = build_dataset(cfg.data.get(args.dataset_type))
 
-    progress_bar = mmcv.ProgressBar(len(dataset))
+    progress_bar = mmengine.ProgressBar(len(dataset))
     if args.output_dir is not None:
-        mmcv.mkdir_or_exist(args.output_dir)
+        mmengine.mkdir_or_exist(args.output_dir)
     
     if args.show == 'project':
         meshes = [mesh.vertices.view(np.ndarray) for mesh in dataset.meshes]

@@ -1,6 +1,6 @@
-from mmcv.utils import Registry, build_from_cfg
+from mmengine.registry import Registry, build_from_cfg
 
-ENCODERS = Registry('encoder')
+MODELS = Registry('MODELS')
 
 def build_encoder(cfg):
-    return build_from_cfg(cfg, ENCODERS)
+    return build_from_cfg(cfg, MODELS)

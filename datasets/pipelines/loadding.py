@@ -1,11 +1,12 @@
 import mmcv
+import mmengine
 import numpy as np
-from .builder import PIPELINES
+from registry import TRANSFORMS
 from ..mask import BitmapMasks
 
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class LoadImages:
     def __init__(self, 
                 color_type='color',
@@ -18,7 +19,7 @@ class LoadImages:
     
     def __call__(self, results):
         if self.file_client is None:
-            self.file_client = mmcv.FileClient(**self.file_client_args)
+            self.file_client = mmengine.FileClient(**self.file_client_args)
 
         filepath = results['img_path']
         img_bytes = self.file_client.get(filepath=filepath)
@@ -35,7 +36,7 @@ class LoadImages:
         
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class LoadMasks:
     def __init__(self,
                 binarize=True,
@@ -50,7 +51,7 @@ class LoadMasks:
     
     def __call__(self, results):
         if self.file_client is None:
-            self.file_client = mmcv.FileClient(**self.file_client_args)
+            self.file_client = mmengine.FileClient(**self.file_client_args)
         
         mask_paths = results['gt_mask_path']
         height, width, _ = results['img_shape']

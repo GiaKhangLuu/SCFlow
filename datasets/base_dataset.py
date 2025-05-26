@@ -4,51 +4,55 @@ import glob, random, tqdm
 from os import path as osp
 from pathlib import Path
 import mmcv
-from mmcv.utils import print_log
+import mmengine
+from mmengine.logging import print_log
 from torch.utils.data import Dataset
 from terminaltables import AsciiTable
 from .pipelines import Compose
-from .builder import build_dataset, DATASETS
+#from .builder import build_dataset, DATASETS
+from registry import DATASETS
 from .pose import project_3d_point
 from .utils import dumps_json
 
-@DATASETS.register_module()
-class ConcatDataset(Dataset):
-    def __init__(self, dataset_configs, ratios=None):
-        super().__init__()
-        self.datasets = [build_dataset(cfg) for cfg in dataset_configs]
-        class_names = self.datasets[0].class_names
-        assert [class_names == dataset.class_names for dataset in self.datasets]
-        self.class_names = self.datasets[0].class_names
-        self.meshes = self.datasets[0].meshes
-        self.ratios = ratios
-        if self.ratios is None:
-            self.ratios = [1.0 for _ in range(len(self.datasets))]
-        assert len(self.ratios) == len(self.datasets)
+# TODO: Imp. this module, currently we do not use build_dataset anymore ...
+#@DATASETS.register_module()
+#class ConcatDataset(Dataset):
+    #def __init__(self, dataset_configs, ratios=None):
+        #super().__init__()
+        #self.datasets = [build_dataset(cfg) for cfg in dataset_configs]
+        #class_names = self.datasets[0].class_names
+        #assert [class_names == dataset.class_names for dataset in self.datasets]
+        #self.class_names = self.datasets[0].class_names
+        #self.meshes = self.datasets[0].meshes
+        #self.ratios = ratios
+        #if self.ratios is None:
+            #self.ratios = [1.0 for _ in range(len(self.datasets))]
+        #assert len(self.ratios) == len(self.datasets)
 
-        self.dataset_length = []
-        for s, r in zip(self.datasets, self.ratios):
-            self.dataset_length.append(int(len(s) * r))
+        #self.dataset_length = []
+        #for s, r in zip(self.datasets, self.ratios):
+            #self.dataset_length.append(int(len(s) * r))
     
-    def __len__(self):
-        return sum(self.dataset_length)
+    #def __len__(self):
+        #return sum(self.dataset_length)
     
-    def __repr__(self) -> str:
-        s = self.__class__.__name__ + '('
-        s += f"image_num:{len(self)}, " 
-        s += f"contains dataset:{self.datasets}, "
-        s += f"datasets ratio:{self.ratios}, "
-        s += f"mixed_datset_length:{self.dataset_length} "
-        return s
+    #def __repr__(self) -> str:
+        #s = self.__class__.__name__ + '('
+        #s += f"image_num:{len(self)}, " 
+        #s += f"contains dataset:{self.datasets}, "
+        #s += f"datasets ratio:{self.ratios}, "
+        #s += f"mixed_datset_length:{self.dataset_length} "
+        #return s
     
-    def __getitem__(self, index):
-        new_index = index % len(self)
-        for i, dataset in enumerate(self.datasets):
-            if new_index < self.dataset_length[i]:
-                new_index = new_index % len(dataset)
-                return dataset[new_index]
-            else:
-                new_index -= self.dataset_length[i]
+    #def __getitem__(self, index):
+        #new_index = index % len(self)
+        #for i, dataset in enumerate(self.datasets):
+            #if new_index < self.dataset_length[i]:
+                #new_index = new_index % len(dataset)
+                #return dataset[new_index]
+            #else:
+                #new_index -= self.dataset_length[i]
+
 class BaseDataset(Dataset):
     def __init__(self,
                 data_root: str,
@@ -102,9 +106,9 @@ class BaseDataset(Dataset):
             gt_pose_json_path = osp.join(self.gt_annots_root, pose_json_tmpl.format(int(sequence)))
             gt_info_json_path = osp.join(self.gt_annots_root, info_json_tmpl.format(int(sequence)))
             camera_json_path = camera_json_tmpl.format(int(sequence))
-            gt_pose_annots = mmcv.load(gt_pose_json_path)
-            camera_annots = mmcv.load(camera_json_path)
-            gt_infos = mmcv.load(gt_info_json_path)
+            gt_pose_annots = mmengine.load(gt_pose_json_path)
+            camera_annots = mmengine.load(camera_json_path)
+            gt_infos = mmengine.load(gt_info_json_path)
             gt_seq_pose_annots[sequence] = dict(pose=gt_pose_annots, camera=camera_annots, gt_info=gt_infos)
         return gt_seq_pose_annots
     
@@ -126,7 +130,7 @@ class BaseDataset(Dataset):
 
 
     def _load_keypoints_3d(self, keypoints_json):
-        keypoints_3d = mmcv.load(keypoints_json)
+        keypoints_3d = mmengine.load(keypoints_json)
         keypoints_3d = np.array(keypoints_3d, dtype=np.float32).reshape(-1, self.keypoints_num, 3)
         return keypoints_3d  
 
@@ -424,53 +428,3 @@ class BaseDataset(Dataset):
         return error_3d_normalized, error_2d, error_3d
         
         
-    def format_results(self, results, save_dir, time=None):
-        '''
-        Args:
-            results (list[dict]): Testing results of the dataset
-            save_dir (str): The directory to save the results in BOP format.
-            match_results (bool): Only save the results matching the target category.
-        
-        '''
-        if not Path(save_dir).exists():
-            Path(save_dir).mkdir(parents=True)
-        sequence_gts = dict()
-        for i, result in enumerate(results):
-            src_path = result['img_metas']['img_path']
-            dst_path = src_path.replace(self.data_root, save_dir)
-            sequence_path = Path(dst_path).parents[1]
-            if not sequence_path.exists():
-                sequence_path.mkdir(parents=True)
-            sequence_path = str(sequence_path)
-            if sequence_path not in sequence_gts:
-                sequence_gts[sequence_path] = dict()
-            id = str(int(Path(dst_path).stem))
-            assert id not in sequence_gts[sequence_path]
-            # predictions
-            preds_orig = result['pred']
-            translations = preds_orig['translations']
-            rotations = preds_orig['rotations']
-            obj_ids = (preds_orig['labels'] + 1).tolist()
-            
-        
-            preds = []
-            num_preds = len(translations)
-            for i in range(num_preds):
-                obj_id = self.inverse_label_mapping[obj_ids[i]]
-                res = dict(
-                    cam_R_m2c=rotations[i].reshape(-1).tolist(),
-                    cam_t_m2c= translations[i].tolist(),
-                    obj_id=obj_id,
-                )
-                if time is not None:
-                    res.update(time=time)
-                preds.append(res)
-            
-            sequence_gts[sequence_path][id] = preds
-
-        for sequence in sequence_gts:
-            # save pose preds
-            save_path = Path(sequence).joinpath('scene_gt.json')
-            save_content = sequence_gts[sequence]
-            dump_content = dumps_json(save_content)
-            save_path.write_text(dump_content)

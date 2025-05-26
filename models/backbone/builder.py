@@ -1,6 +1,6 @@
-from mmcv.utils import build_from_cfg, Registry
+from mmengine.registry import build_from_cfg, Registry
 
-BACKBONES = Registry('backbone')
+MODELS = Registry('MODELS')
 
 def build_backbone(cfg):
-    return build_from_cfg(cfg, BACKBONES)
+    return build_from_cfg(cfg, MODELS)

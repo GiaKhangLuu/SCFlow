@@ -3,10 +3,8 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 
-from .builder import REFINERS
+from registry import MODELS
 from .base_flow_refiner import BaseFlowRefiner
-from ..encoder import build_encoder
-from ..loss import build_loss
 from ..utils import (
     get_flow_from_delta_pose_and_depth, filter_flow_by_mask, 
     remap_pose_to_origin_resoluaion)
@@ -15,7 +13,7 @@ import numpy as np
 
 
 
-@REFINERS.register_module()
+@MODELS.register_module()
 class RAFTRefinerFlow(BaseFlowRefiner):
     """RAFT model. Supervised version. Predict flow.
 
@@ -59,7 +57,7 @@ class RAFTRefinerFlow(BaseFlowRefiner):
             test_cfg=test_cfg,
             init_cfg=init_cfg)
         
-        self.context = build_encoder(cxt_encoder)
+        self.context = MODELS.build(cxt_encoder)
         self.h_channels = h_channels
         self.cxt_channels = cxt_channels
 
@@ -68,7 +66,7 @@ class RAFTRefinerFlow(BaseFlowRefiner):
         assert self.h_channels + self.cxt_channels == self.context.out_channels
 
         if loss_cfg is not None:
-            self.loss_func = build_loss(loss_cfg)
+            self.loss_func = MODELS.build(loss_cfg)
         if freeze_bn:
             self.freeze_bn()
         self.test_iter_num = self.test_cfg.get('iters') if 'iters' in self.test_cfg else self.decoder.iters

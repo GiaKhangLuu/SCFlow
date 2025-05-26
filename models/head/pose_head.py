@@ -1,14 +1,14 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from mmcv.runner import BaseModule
+from mmengine.model import BaseModule
 from mmcv.cnn import ConvModule
 
-from .builder import HEAD
+from registry import MODELS
 
 
 
-@HEAD.register_module()
+@MODELS.register_module()
 class SingleClassPoseHead(BaseModule):
 
     _conv_feat_channels = {'Basic':[128, 128, 128], 'Large':[128, 128, 128]}
@@ -107,7 +107,7 @@ class SingleClassPoseHead(BaseModule):
 
 
 
-@HEAD.register_module()
+@MODELS.register_module()
 class MultiClassPoseHead(BaseModule):
 
     _conv_feat_channels = {'Basic':[128, 128, 128], 'Large':[128, 128, 128]}

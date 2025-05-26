@@ -1,13 +1,14 @@
 import random
 import mmcv
+import mmengine
 import cv2
 import glob
 import warnings
 from os import path as osp
 import numpy as np
 from typing import Sequence
-from .builder import PIPELINES
 from ..mask import BitmapMasks
+from registry import TRANSFORMS
 
 
 class ColorTransform:
@@ -73,7 +74,7 @@ class ColorTransform:
         
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomHSV(ColorTransform):
     def __init__(self, h_ratio, s_ratio, v_ratio, p=1.0, patch_level=True, image_keys=['img']):
         super(RandomHSV, self).__init__(patch_level, image_keys=image_keys)
@@ -100,7 +101,7 @@ class RandomHSV(ColorTransform):
         img_hsv[:, :, 2] = v if c < 1 else v.clip(None, 255)
         return cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR)
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomNoise(ColorTransform):
     def __init__(self, noise_ratio, p=1.0, patch_level=True, image_keys=['img']):
         super(RandomNoise, self).__init__(patch_level, image_keys=image_keys)
@@ -117,7 +118,7 @@ class RandomNoise(ColorTransform):
         img[img < 0] = 0
         return np.uint8(img)
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomSmooth(ColorTransform):
     def __init__(self, max_kernel_size=7, p=1.0, patch_level=True, image_keys=['img']):
         super(RandomSmooth, self).__init__(patch_level, image_keys=image_keys)
@@ -132,7 +133,7 @@ class RandomSmooth(ColorTransform):
         img = cv2.blur(img, (kernel_size, kernel_size))
         return img
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomSharpness(ColorTransform):
     def __init__(self, 
                 kernel_sizes=[5, 7, 9, 11], 
@@ -158,7 +159,7 @@ class RandomSharpness(ColorTransform):
         img = cv2.normalize(img, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype(np.uint8)
         return img
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomGray(ColorTransform):
     def __init__(self, p=1., patch_level=True, image_keys=['img']):
         super().__init__(patch_level, image_keys=image_keys)
@@ -172,7 +173,7 @@ class RandomGray(ColorTransform):
 
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomBackground(ColorTransform):
     def __init__(self, 
                 background_dir:str, 
@@ -206,7 +207,7 @@ class RandomBackground(ColorTransform):
     
     def sample_random_background(self):
         if self.file_client is None:
-            self.file_client = mmcv.FileClient(**self.file_client_args)
+            self.file_client = mmengine.FileClient(**self.file_client_args)
         
         bg_img_path = random.choice(self.background_images)
         try:
@@ -244,7 +245,7 @@ class RandomBackground(ColorTransform):
     
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Normalize(ColorTransform):
     def __init__(self, mean, std, to_rgb=True, patch_level=True, image_keys=['img']):
         super(Normalize, self).__init__(patch_level, image_keys)
@@ -269,7 +270,7 @@ class Normalize(ColorTransform):
         return results
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomOcclusion:
     def __init__(self, 
                 p=0, 
@@ -325,7 +326,7 @@ class RandomOcclusion:
         results[self.mask_field] = new_masks
         return results
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RandomOcclusionV2:
     def __init__(self, 
                 augment_mask_field, 
@@ -340,7 +341,7 @@ class RandomOcclusionV2:
             image_list = f.readlines()
             image_list = [osp.join(self.data_root, image_path.strip()) for image_path in image_list]
         self.image_list = image_list
-        self.file_client = mmcv.FileClient(**file_client_args)
+        self.file_client = mmengine.FileClient(**file_client_args)
         self.augmet_mask_field = augment_mask_field
         self.p = p
         self.scale_range = scale_range

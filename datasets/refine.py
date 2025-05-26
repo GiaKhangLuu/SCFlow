@@ -1,17 +1,13 @@
 from typing import Optional, Sequence
 import itertools
 import mmcv
+import mmengine
 import numpy as np
 from os import path as osp
 from pathlib import Path
-from .builder import DATASETS
+from registry import DATASETS
 from .base_dataset import BaseDataset
-
-
-
-
-
-
+from terminaltables import AsciiTable
 
 @DATASETS.register_module()
 class RefineDataset(BaseDataset):
@@ -53,7 +49,6 @@ class RefineDataset(BaseDataset):
         self.filter_invalid_pose = filter_invalid_pose
         self.depth_range = depth_range
         self.gt_seq_pose_annots, self.ref_seq_pose_annots = self._load_pose_annots()
-        
     
     def _load_pose_annots(self):
         sequences = set([p.split(self.data_root)[1].split('/')[1] for p in self.img_files])
@@ -66,14 +61,14 @@ class RefineDataset(BaseDataset):
             ref_info_json_path = osp.join(self.ref_annots_root, self.info_json_tmpl.format(int(sequence)))
             gt_info_json_path = osp.join(self.gt_annots_root, self.info_json_tmpl.format(int(sequence)))
             camera_json_path = self.camera_json_tmpl.format(int(sequence))
-            gt_pose_annots = mmcv.load(gt_pose_json_path)
-            ref_pose_annots = mmcv.load(ref_pose_json_path)
-            camera_annots = mmcv.load(camera_json_path)
-            gt_infos = mmcv.load(gt_info_json_path)
+            gt_pose_annots = mmengine.load(gt_pose_json_path)
+            ref_pose_annots = mmengine.load(ref_pose_json_path)
+            camera_annots = mmengine.load(camera_json_path)
+            gt_infos = mmengine.load(gt_info_json_path)
             ref_seq_pose_annots[sequence] = dict(pose=ref_pose_annots, camera=camera_annots)
             gt_seq_pose_annots[sequence] = dict(pose=gt_pose_annots, camera=camera_annots, gt_info=gt_infos)
             if Path(ref_info_json_path).exists():
-                ref_seq_pose_annots[sequence].update(ref_info=mmcv.load(ref_info_json_path))
+                ref_seq_pose_annots[sequence].update(ref_info=mmengine.load(ref_info_json_path))
         return gt_seq_pose_annots, ref_seq_pose_annots
     
     
@@ -269,13 +264,13 @@ class RefineTestDataset(BaseDataset):
             ref_pose_json_path = osp.join(self.ref_annots_root, self.pose_json_tmpl.format(int(sequence)))
             ref_info_json_path = osp.join(self.ref_annots_root, self.info_json_tmpl.format(int(sequence)))
             camera_json_path = self.camera_json_tmpl.format(int(sequence))
-            ref_pose_annots = mmcv.load(ref_pose_json_path)
-            camera_annots = mmcv.load(camera_json_path)
+            ref_pose_annots = mmengine.load(ref_pose_json_path)
+            camera_annots = mmengine.load(camera_json_path)
             ref_seq_pose_annots[sequence] = dict(pose=ref_pose_annots, camera=camera_annots)
             if self.with_reference_bbox:
                 ref_info_json_path = osp.join(self.ref_annots_root, self.info_json_tmpl.format(int(sequence)))
                 assert Path(ref_info_json_path).exists()
-                ref_seq_pose_annots[sequence].update(info=mmcv.load(ref_info_json_path))
+                ref_seq_pose_annots[sequence].update(info=mmengine.load(ref_info_json_path))
         return ref_seq_pose_annots
     
     
@@ -334,7 +329,7 @@ class RefineTestDataset(BaseDataset):
         ref_keypoints_3d = self.keypoints_3d[ref_labels]
         if self.with_reference_bbox:
             ref_bboxes = np.stack(ref_bboxes, axis=0)
-            ref_bboxes[..., 2:] = ref_bboxes[..., 2] + ref_bboxes[..., 2:] # xywh to xyxy
+            ref_bboxes[..., 2:] = ref_bboxes[..., :2] + ref_bboxes[..., 2:] # xywh to xyxy
         ref_obj_num = len(ref_rotations)
         k_orig = np.array(camera_annots['cam_K'], dtype=np.float32).reshape(3,3)
         k = np.repeat(k_orig[None], repeats=ref_obj_num,  axis=0)

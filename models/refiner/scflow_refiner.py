@@ -3,19 +3,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 from collections import OrderedDict
-from .builder import REFINERS
 from .base_refiner import BaseRefiner
-from ..encoder import build_encoder
-from ..loss import build_loss, RAFTLoss
+from ..loss import RAFTLoss
 from models.utils import (
     get_flow_from_delta_pose_and_depth,
     remap_pose_to_origin_resoluaion, 
     filter_flow_by_mask, cal_3d_2d_corr)
+from datasets import DataContainer
+from registry import MODELS
 
-
-
-
-@REFINERS.register_module()
+@MODELS.register_module()
 class SCFlowRefiner(BaseRefiner):
     def __init__(self,
                  seperate_encoder: bool,
@@ -46,8 +43,7 @@ class SCFlowRefiner(BaseRefiner):
             train_cfg=train_cfg, 
             test_cfg=test_cfg,
             init_cfg=init_cfg)
-        
-        self.context = build_encoder(cxt_encoder)
+        self.context = MODELS.build(cxt_encoder)
         self.h_channels = h_channels
         self.cxt_channels = cxt_channels
 
@@ -56,9 +52,9 @@ class SCFlowRefiner(BaseRefiner):
         assert self.cxt_channels == self.decoder.cxt_channels
         assert self.h_channels + self.cxt_channels == self.context.out_channels
 
-        self.pose_loss_func = build_loss(pose_loss_cfg)
-        self.flow_loss_func = build_loss(flow_loss_cfg)
-        self.mask_loss_func = build_loss(mask_loss_cfg)
+        self.pose_loss_func = MODELS.build(pose_loss_cfg)
+        self.flow_loss_func = MODELS.build(flow_loss_cfg)
+        self.mask_loss_func = MODELS.build(mask_loss_cfg)
         if freeze_bn:
             self.freeze_bn()
         if freeze_encoder:
@@ -82,8 +78,8 @@ class SCFlowRefiner(BaseRefiner):
             if isinstance(m, nn.BatchNorm2d):
                 m.eval()
     def to(self, device):
-        super().to(device)
         self.pose_loss_func.to(device)
+        return super().to(device)
 
     def extract_feat(
         self, render_images, real_images,
@@ -169,6 +165,8 @@ class SCFlowRefiner(BaseRefiner):
         batch_scores = torch.split(torch.ones_like(labels, dtype=torch.float32), per_img_patch_num)
         image_metas = data_batch['img_metas']
         batch_internel_k = torch.split(internel_k, per_img_patch_num)
+
+        image_metas = [meta.data for meta in image_metas]
         
         batch_rotations, batch_translations = remap_pose_to_origin_resoluaion(batch_rotations, batch_translations, batch_internel_k, image_metas)
         return dict(
@@ -213,7 +211,7 @@ class SCFlowRefiner(BaseRefiner):
             img_metas = data_batch['img_metas']
             # fixed scale for each image
             scale_factors = torch.from_numpy(
-                np.concatenate([img_meta['scale_factor'][..., 0] for img_meta in img_metas])).to(gt_flow.device)
+                np.concatenate([img_meta.data['scale_factor'][..., 0] for img_meta in img_metas])).to(gt_flow.device)
             loss_pose, seq_pose_loss_list = self.pose_loss_func(
                 seq_rotations, seq_translations, 
                 gt_r=gt_rotations, gt_t=gt_translations, 
@@ -254,6 +252,6 @@ class SCFlowRefiner(BaseRefiner):
                 gt_flow=gt_flow, pose_flow=pred_pose_flow, pred_flow=pred_flow,
             )
         )
-        log_vars.update({'loss_mask':loss_mask.item(), 'loss_flow':loss_flow.item(), 'loss_pose':loss_pose.item(), 'loss':loss.item()})
+        log_vars.update({'loss_mask':loss_mask.item(), 'loss_flow':loss_flow.item(), 'loss_pose':loss_pose.item()})
         return loss, log_imgs, log_vars, seq_rotations, seq_translations
 

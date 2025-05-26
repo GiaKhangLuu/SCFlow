@@ -6,7 +6,7 @@ import numpy as np
 
 from scipy.spatial.transform import Rotation
 
-from .builder import PIPELINES
+from registry import TRANSFORMS
 from ..pose import eval_rot_error, remap_pose, eval_tran_error, load_mesh
 from collections.abc import Sequence
 
@@ -19,7 +19,7 @@ def update_transform_matrix(transform_matrix, results):
         results['transform_matrix'] = np.matmul(transform_matrix, results['transform_matrix'])
     return results
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class RemapPose:
     '''
     This class represents the general Geomtery Augmentation.
@@ -151,7 +151,7 @@ class RemapPose:
 
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Crop:
     '''
     Randomly select one object, and crop its corresponding patch.
@@ -277,7 +277,7 @@ class Crop:
 
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Resize:
     '''Resize the image & mask.
 
@@ -392,7 +392,7 @@ class Resize:
         return results
 
 
-@PIPELINES.register_module()
+@TRANSFORMS.register_module()
 class Pad:
     '''
     Pad the image & masks

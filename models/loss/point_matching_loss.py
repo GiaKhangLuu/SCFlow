@@ -5,13 +5,13 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from pytorch3d.ops import knn_points
-from .builder import LOSSES
+from registry import MODELS
 import numpy as np
 
 
 EPS = 1e-8
 
-@LOSSES.register_module()
+@MODELS.register_module()
 class PointMatchingLoss(nn.Module):
     def __init__(self, 
                 symmetry_types,
@@ -37,7 +37,7 @@ class PointMatchingLoss(nn.Module):
         assert loss_type in ['l1', 'l2']
         self.loss_type = int(loss_type[-1])
         if not self.use_perspective_shape:
-            self.meshes = self._load_mesh(mesh_path)
+            self.meshes = self._load_mesh(mesh_path, ext=".obj")
         else:
             self.meshes = None
     
@@ -103,7 +103,7 @@ class PointMatchingLoss(nn.Module):
         return self.loss_weight * loss
 
 
-@LOSSES.register_module()
+@MODELS.register_module()
 class DisentanglePointMatchingLoss(nn.Module):
     '''
     Disentangled pointmatching loss: https://arxiv.org/abs/1905.12365
@@ -135,7 +135,7 @@ class DisentanglePointMatchingLoss(nn.Module):
         assert loss_type in ['l1', 'l2']
         self.loss_type = int(loss_type[-1])
         if not self.use_perspective_shape:
-            self.meshes = self._load_mesh(mesh_path)
+            self.meshes = self._load_mesh(mesh_path, ext=".obj")
         else:
             self.meshes = None
     
@@ -218,7 +218,7 @@ class DisentanglePointMatchingLoss(nn.Module):
         return self.loss_weight * loss
         
         
-@LOSSES.register_module()
+@MODELS.register_module()
 class RotPointMatchingLoss(nn.Module):
     def __init__(self, 
                 symmetry_types,
@@ -238,7 +238,7 @@ class RotPointMatchingLoss(nn.Module):
         assert loss_type in ['l1', 'l2']
         self.loss_type = int(loss_type[-1])
         if not self.use_perspective_shape:
-            self.meshes = self._load_mesh(mesh_path)
+            self.meshes = self._load_mesh(mesh_path, ext='.obj')
         else:
             self.meshes = None
     
